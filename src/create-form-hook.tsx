@@ -1,13 +1,12 @@
 // https://github.com/TanStack/form/blob/main/packages/react-form/src/createFormHook.tsx
 import type { ComponentType, Context, JSX, PropsWithChildren } from 'react'
-import type { AnyFieldApi, AnyFormApi, DeepKeysOfType, FieldsMap, FormAsyncValidateOrFn, FormValidateOrFn } from '@tanstack/form-core'
+import type { AnyFieldApi, AnyFormApi, DeepKeysOfType, FieldsMap, FormApi, FormAsyncValidateOrFn, FormValidateOrFn } from '@tanstack/form-core'
 import type { AppFieldExtendedReactFieldGroupApi, AppFieldExtendedReactFormApi, FieldComponent, ReactFormExtendedApi, WithFieldGroupProps, WithFormProps } from '@tanstack/react-form'
 
 import { useMemo } from 'react'
-import { observer } from 'mobx-react-lite'
 import { Field, useFieldGroup } from '@tanstack/react-form'
 
-import type { MobxForm } from './mobx-tanstack-form'
+import { useIsomorphicLayoutEffect } from './use-isomorphic-layout-effect'
 
 type UnwrapOrAny<T> = [unknown] extends [T] ? any : T
 type UnwrapDefaultOrAny<DefaultT, T> = [DefaultT] extends [T]
@@ -46,10 +45,8 @@ export function createFormHook<
     TOnServer extends undefined | FormAsyncValidateOrFn<TFormData>,
     TSubmitMeta,
   >(
-    // MOBX ADAPTATION: Accept pre-created MobxForm instance instead of form options
-    // Original React version: (opts: FormOptions<...>) => FormApi
-    // This version: (mobxForm: MobxForm<...>) => ExtendedFormApi
-    mobxForm: MobxForm<
+    // FormApi instnace instead of options, since we already create instance inside Mobx store
+    formApi: FormApi<
       TFormData,
       TOnMount,
       TOnChange,
@@ -79,10 +76,8 @@ export function createFormHook<
     TComponents,
     TFormComponents
   > {
+    // Do what useForm hook does
     const form = useMemo(() => {
-      // MOBX ADAPTATION: Use existing MobxForm instance directly
-      // Original React version: Creates new FormApi from options using useForm(opts)
-      // This version: Casts pre-created MobxForm to ReactFormExtendedApi interface
       const extendedApi: ReactFormExtendedApi<
         TFormData,
         TOnMount,
@@ -96,14 +91,17 @@ export function createFormHook<
         TOnDynamicAsync,
         TOnServer,
         TSubmitMeta
-      > = mobxForm as never
+      > = formApi as never
 
       extendedApi.Field = function APIField(props) {
-        return <Field {...props} form={form} />
+        return <Field {...props} form={formApi} />
       }
 
       return extendedApi
-    }, [mobxForm]) // MOBX ADAPTATION: Dependency on mobxForm instance instead of form options
+    }, [formApi])
+
+    // Mounting, probably could be done right in mobx store if use useState or useLocalObservable for creating stores
+    useIsomorphicLayoutEffect(formApi.mount, [])
 
     const AppForm = useMemo(() => {
       const AppForm = (({ children }) => {
@@ -208,10 +206,7 @@ export function createFormHook<
     UnwrapOrAny<TFormComponents>,
     UnwrapOrAny<TRenderProps>
   >['render'] {
-    // MOBX ADAPTATION: Wrap render function with observer for MobX reactivity
-    // Original React version: Direct render function return
-    // This version: observer-wrapped render function to track MobX state changes
-    return observer(innerProps => render({ ...props, ...innerProps }))
+    return innerProps => render({ ...props, ...innerProps })
   }
 
   function withFieldGroup<
@@ -247,8 +242,7 @@ export function createFormHook<
   >(
     params: PropsWithChildren<
       NoInfer<TRenderProps> & {
-        form:
-          | AppFieldExtendedReactFormApi<
+        form: AppFieldExtendedReactFormApi<
           TFormData,
           TOnMount,
           TOnChange,
@@ -288,10 +282,7 @@ export function createFormHook<
       }
     >,
   ) => JSX.Element {
-    // MOBX ADAPTATION: Wrap field group render function with observer for MobX reactivity
-    // Original React version: Direct component function return
-    // This version: observer-wrapped component to track MobX state changes in field groups
-    return observer((innerProps) => {
+    return (innerProps) => {
       const fieldGroupProps = useMemo(() => {
         return {
           form: innerProps.form,
@@ -303,7 +294,7 @@ export function createFormHook<
       const fieldGroupApi = useFieldGroup(fieldGroupProps as any)
 
       return render({ ...props, ...innerProps, group: fieldGroupApi as any })
-    })
+    }
   }
   return { useAppForm, withForm, withFieldGroup }
 }

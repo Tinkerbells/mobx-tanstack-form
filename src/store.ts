@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { makeAutoObservable } from 'mobx'
 
-import { createMobxForm } from './mobx-tanstack-form'
+import { createForm } from './create-form'
 
 export const UserFormSchema = z.object({
   firstName: z.string().min(1),
@@ -16,10 +16,13 @@ export type UserFormType = z.infer<typeof UserFormSchema>
 
 export class Store {
   constructor() {
-    makeAutoObservable(this)
+    makeAutoObservable(this, {
+      // make sure to exclude from observation
+      userForm: false,
+    })
   }
 
-  userForm = createMobxForm({
+  userForm = createForm({
     defaultValues: {
       firstName: '',
       lastName: '',
